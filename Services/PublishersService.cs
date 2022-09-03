@@ -1,0 +1,92 @@
+﻿using System.Text.RegularExpressions;
+using Udemy.Data;
+using Udemy.Data.Paging;
+using Udemy.Exceptions;
+using Udemy.Models;
+using Udemy.ViewModels;
+
+namespace Udemy.Services
+{
+    public class PublishersService
+    {
+        private AppDbContext _context;
+        public PublishersService(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        public Publisher AddPublisher(PublisherVM publisher)
+        {
+            if (StringStartsWithNumber(publisher.Name)) throw new PublisherNameException("Publisher's name starts with a digit", publisher.Name);
+            var _publisher = new Publisher()
+            {
+                Name = publisher.Name
+            };
+            _context.Publishers.Add(_publisher);
+            _context.SaveChanges();
+
+            return _publisher;
+        }
+
+        public List<Publisher> GetAllPublishers(string sortBy, string searchString, int? pageNumber)
+        {
+            var allPublishers = _context.Publishers.OrderBy(n => n.Name).ToList();
+            if (!string.IsNullOrEmpty(sortBy))
+            {
+                switch (sortBy)
+                {
+                    case "name_desc":
+                        allPublishers = _context.Publishers.OrderByDescending(n => n.Name).ToList();
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(searchString))
+            {
+                allPublishers = allPublishers.Where(n => n.Name.Contains(searchString, StringComparison.CurrentCultureIgnoreCase)).ToList();
+            }
+
+           
+            int pageSize = 5;
+            allPublishers = PaginatedList<Publisher>.Create(allPublishers.AsQueryable(), pageNumber ?? 1, pageSize);
+            
+            
+
+            return allPublishers;
+        } 
+
+        public Publisher GetPublisherById(int publisherId) => _context.Publishers.FirstOrDefault(b => b.Id == publisherId);
+
+        public PublisherWithBooksAndAuthorsVM GetPublisherData (int publisherId)
+        {
+            var _publisherData = _context.Publishers.Where(n => n.Id == publisherId).Select(n => new PublisherWithBooksAndAuthorsVM()
+            {
+                Name=n.Name,
+                BookAuthors = n.Books.Select(n => new BookAuthorVM()
+                {
+                    BookName = n.Title,
+                    BookAuthors = n.Book_Authors.Select(n => n.Author.Name).ToList()
+                }).ToList()
+            }).FirstOrDefault();
+            return _publisherData;
+        }
+
+        public void DeletePublisherById(int id)
+        {
+            var _publisher = _context.Publishers.FirstOrDefault(b => b.Id == id);
+            if (_publisher != null)
+            {
+                _context.Publishers.Remove(_publisher);
+                _context.SaveChanges();
+            }
+            else
+            {
+                throw new Exception($"The publisher with id {id} does not exist");
+            }
+        }
+
+        private bool StringStartsWithNumber(string name) => Regex.IsMatch(name, @"^\d");
+    }
+}
